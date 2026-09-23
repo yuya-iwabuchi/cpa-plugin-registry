@@ -90,6 +90,7 @@ func CheckArchive(data []byte, id, version, goos string) (string, error) {
 	ext := LibraryExtension(goos)
 	names := []string{id + ext, id + "-v" + version + ext}
 	found := ""
+	var target *zip.File
 	for _, file := range reader.File {
 		name, err := cleanZipName(file.Name)
 		if err != nil {
@@ -115,10 +116,20 @@ func CheckArchive(data []byte, id, version, goos string) (string, error) {
 		if found != "" {
 			return "", fmt.Errorf("zip contains both %s and %s", found, name)
 		}
-		found = name
+		found, target = name, file
 	}
 	if found == "" {
 		return "", fmt.Errorf("zip does not contain %s", names[0])
+	}
+	// Reading the whole entry runs its decompressor and CRC check, as the
+	// host's install does.
+	rc, err := target.Open()
+	if err != nil {
+		return "", fmt.Errorf("open %s: %w", found, err)
+	}
+	defer rc.Close()
+	if _, err := io.Copy(io.Discard, rc); err != nil {
+		return "", fmt.Errorf("read %s: %w", found, err)
 	}
 	return found, nil
 }

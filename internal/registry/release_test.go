@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"hash/crc32"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -84,6 +85,43 @@ func TestCheckArchive(t *testing.T) {
 	}
 	if _, err := CheckArchive([]byte("not a zip"), "demo", "1.2.0", "darwin"); err == nil || !strings.Contains(err.Error(), "open zip") {
 		t.Fatalf("want open zip error, got %v", err)
+	}
+}
+
+// rawZip stores content under name with the given method, without compressing
+// it, and returns the archive.
+func rawZip(t *testing.T, name string, method uint16, content []byte) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	w := zip.NewWriter(&buf)
+	f, err := w.CreateRaw(&zip.FileHeader{
+		Name: name, Method: method, CRC32: crc32.ChecksumIEEE(content),
+		CompressedSize64: uint64(len(content)), UncompressedSize64: uint64(len(content)),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Write(content); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+func TestCheckArchiveReadsLibrary(t *testing.T) {
+	stored := rawZip(t, "demo.dylib", zip.Store, []byte("library bytes"))
+	if _, err := CheckArchive(stored, "demo", "1.2.0", "darwin"); err != nil {
+		t.Fatalf("want a stored library to pass, got %v", err)
+	}
+	corrupt := bytes.Replace(stored, []byte("library bytes"), []byte("library bytez"), 1)
+	if _, err := CheckArchive(corrupt, "demo", "1.2.0", "darwin"); err == nil || !strings.Contains(err.Error(), "read demo.dylib: zip: checksum error") {
+		t.Fatalf("want a checksum error, got %v", err)
+	}
+	unsupported := rawZip(t, "demo.dylib", 99, []byte("library bytes"))
+	if _, err := CheckArchive(unsupported, "demo", "1.2.0", "darwin"); err == nil || !strings.Contains(err.Error(), "open demo.dylib: zip: unsupported compression algorithm") {
+		t.Fatalf("want an unsupported compression error, got %v", err)
 	}
 }
 
