@@ -85,13 +85,17 @@ func (p Plugin) InstallType() string {
 	return strings.ToLower(strings.TrimSpace(p.Install.Type))
 }
 
-// Format renders r exactly as the registry file must be written.
+// Format renders r exactly as the registry file must be written: two-space
+// indent, &, < and > unescaped, and one final newline.
 func Format(r Registry) ([]byte, error) {
-	out, err := json.MarshalIndent(r, "", "  ")
-	if err != nil {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(r); err != nil {
 		return nil, err
 	}
-	return append(out, '\n'), nil
+	return buf.Bytes(), nil
 }
 
 // Check decodes data and returns the trimmed registry with every rule

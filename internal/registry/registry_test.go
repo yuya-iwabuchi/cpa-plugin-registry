@@ -189,6 +189,8 @@ func TestDecodeAndFormat(t *testing.T) {
 		{"missing final newline", strings.TrimSuffix(string(valid), "\n"), "not canonically formatted"},
 		{"tab indent", strings.ReplaceAll(string(valid), "  ", "\t"), "not canonically formatted"},
 		{"key order", replace(`"id": "demo",`+"\n      "+`"name": "Demo",`, `"name": "Demo",`+"\n      "+`"id": "demo",`), "not canonically formatted"},
+		{"ampersand is written as is", replace("A demo plugin.", "a & b"), ""},
+		{"escaped ampersand", replace("A demo plugin.", `a \u0026 b`), "not canonically formatted"},
 		{"explicit false auth_required", replace(`"license"`, `"auth_required": false,`+"\n      "+`"license"`), "not canonically formatted"},
 	}
 	for _, tt := range tests {
