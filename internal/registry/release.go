@@ -21,6 +21,10 @@ import (
 // maxDownload bounds each downloaded release asset.
 const maxDownload = 256 << 20
 
+// retryDelay is the pause before the one retry of a request that fails with
+// a network error or a 5xx status.
+var retryDelay = 2 * time.Second
+
 type Platform struct{ GOOS, GOARCH string }
 
 func (p Platform) String() string { return p.GOOS + "/" + p.GOARCH }
@@ -243,7 +247,26 @@ func (c Releases) checkPlatform(ctx context.Context, assets, checksums map[strin
 	return CheckArchive(data, id, version, p.GOOS)
 }
 
+// transientError marks a failure that one retry may clear.
+type transientError struct{ error }
+
+func (e transientError) Unwrap() error { return e.error }
+
+// get fetches rawURL, retrying once within ctx after a transient failure.
 func (c Releases) get(ctx context.Context, rawURL, accept string) ([]byte, error) {
+	data, err := c.getOnce(ctx, rawURL, accept)
+	if !errors.As(err, new(transientError)) || ctx.Err() != nil {
+		return data, err
+	}
+	select {
+	case <-ctx.Done():
+		return nil, err
+	case <-time.After(retryDelay):
+	}
+	return c.getOnce(ctx, rawURL, accept)
+}
+
+func (c Releases) getOnce(ctx context.Context, rawURL, accept string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return nil, err
@@ -257,7 +280,7 @@ func (c Releases) get(ctx context.Context, rawURL, accept string) ([]byte, error
 	}
 	resp, err := c.Client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, transientError{err}
 	}
 	defer resp.Body.Close()
 	rateLimited := resp.StatusCode == http.StatusTooManyRequests ||
@@ -275,11 +298,15 @@ func (c Releases) get(ctx context.Context, rawURL, accept string) ([]byte, error
 		return nil, errors.New(msg)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GET %s: %s", rawURL, resp.Status)
+		err := fmt.Errorf("GET %s: %s", rawURL, resp.Status)
+		if resp.StatusCode >= 500 {
+			return nil, transientError{err}
+		}
+		return nil, err
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxDownload+1))
 	if err != nil {
-		return nil, err
+		return nil, transientError{err}
 	}
 	if len(data) > maxDownload {
 		return nil, fmt.Errorf("GET %s: response exceeds %d bytes", rawURL, maxDownload)

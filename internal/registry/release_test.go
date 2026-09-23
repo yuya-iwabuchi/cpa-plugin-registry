@@ -13,7 +13,9 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 type zipEntry struct {
@@ -292,5 +294,53 @@ func TestReleasesCheckSendsTokenToAPIOnly(t *testing.T) {
 	assertErrs(t, errs, "rate limit")
 	if strings.Contains(errs[0].Error(), "set GITHUB_TOKEN") {
 		t.Fatalf("token hint shown although a token is set: %v", errs[0])
+	}
+}
+
+func TestGetRetriesOnce(t *testing.T) {
+	defer func(d time.Duration) { retryDelay = d }(retryDelay)
+	retryDelay = time.Millisecond
+	tests := []struct {
+		name     string
+		statuses []int // one per attempt, the last repeating; 0 drops the connection
+		wantHits int
+		wantErr  string
+	}{
+		{"5xx then ok", []int{http.StatusBadGateway, http.StatusOK}, 2, ""},
+		{"network error then ok", []int{0, http.StatusOK}, 2, ""},
+		{"5xx twice", []int{http.StatusServiceUnavailable}, 2, "503 Service Unavailable"},
+		{"network error twice", []int{0}, 2, "EOF"},
+		{"not found", []int{http.StatusNotFound}, 1, "404 Not Found"},
+		{"forbidden", []int{http.StatusForbidden}, 1, "403 Forbidden"},
+		{"too many requests", []int{http.StatusTooManyRequests}, 1, "rate limit hit (429"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var hits atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				status := tt.statuses[min(int(hits.Add(1))-1, len(tt.statuses)-1)]
+				if status == 0 {
+					conn, _, _ := w.(http.Hijacker).Hijack()
+					conn.Close()
+					return
+				}
+				w.WriteHeader(status)
+				fmt.Fprint(w, "body")
+			}))
+			defer server.Close()
+			data, err := Releases{Client: server.Client(), APIBase: server.URL}.get(context.Background(), server.URL+"/x", "*/*")
+			if got := int(hits.Load()); got != tt.wantHits {
+				t.Errorf("want %d requests, got %d", tt.wantHits, got)
+			}
+			if tt.wantErr == "" {
+				if err != nil || string(data) != "body" {
+					t.Fatalf("want body, got %q, %v", data, err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("want error containing %q, got %v", tt.wantErr, err)
+			}
+		})
 	}
 }
