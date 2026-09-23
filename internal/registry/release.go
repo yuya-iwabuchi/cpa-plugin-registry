@@ -19,7 +19,7 @@ import (
 )
 
 // maxDownload bounds each downloaded release asset.
-const maxDownload = 256 << 20
+var maxDownload = 256 << 20
 
 // retryDelay is the pause before the one retry of a request that fails with
 // a network error or a 5xx status.
@@ -310,7 +310,7 @@ func (c Releases) getOnce(ctx context.Context, rawURL, accept string) ([]byte, e
 		}
 		return nil, err
 	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, maxDownload+1))
+	data, err := io.ReadAll(io.LimitReader(resp.Body, int64(maxDownload)+1))
 	if err != nil {
 		return nil, transientError{err}
 	}

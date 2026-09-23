@@ -219,6 +219,8 @@ func TestRegistryFile(t *testing.T) {
 	assertErrs(t, errs, "")
 }
 
+// assertErrs fails unless errs is empty for an empty want, or is exactly one
+// error containing want.
 func assertErrs(t *testing.T, errs []error, want string) {
 	t.Helper()
 	if want == "" {
@@ -227,10 +229,7 @@ func assertErrs(t *testing.T, errs []error, want string) {
 		}
 		return
 	}
-	for _, err := range errs {
-		if strings.Contains(err.Error(), want) {
-			return
-		}
+	if len(errs) != 1 || !strings.Contains(errs[0].Error(), want) {
+		t.Fatalf("want one error containing %q, got %v", want, errs)
 	}
-	t.Fatalf("want an error containing %q, got %v", want, errs)
 }

@@ -177,6 +177,7 @@ type fakeGitHub struct {
 	status    int // non-zero: every request answers with this status
 	header    http.Header
 	downloads string            // base URL of the asset host
+	namePad   string            // surrounds each asset name in the release
 	auth      map[string]string // Authorization header by request path
 }
 
@@ -206,7 +207,7 @@ func (f *fakeGitHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		rel := release{TagName: f.tag}
 		for name, body := range f.assets {
 			if body != nil {
-				rel.Assets = append(rel.Assets, releaseAsset{Name: name, URL: f.downloads + "/download/" + name})
+				rel.Assets = append(rel.Assets, releaseAsset{Name: f.namePad + name + f.namePad, URL: f.downloads + "/download/" + name})
 			}
 		}
 		_ = json.NewEncoder(w).Encode(rel)
@@ -245,8 +246,15 @@ func TestReleasesCheck(t *testing.T) {
 		{"malformed checksums.txt", func(f *fakeGitHub) { f.assets["checksums.txt"] = []byte("oops\n") }, "invalid checksum entry"},
 		{"missing platform zip", func(f *fakeGitHub) { f.assets[linuxArm] = nil }, "linux/arm64: release asset " + linuxArm + " not found"},
 		{"platform zip missing from checksums", func(f *fakeGitHub) {
-			f.assets["checksums.txt"] = []byte(strings.Join(strings.Split(string(f.assets["checksums.txt"]), "\n")[:3], "\n"))
-		}, "checksums.txt has no entry for " + linuxArm},
+			var kept []string
+			for _, line := range strings.Split(string(f.assets["checksums.txt"]), "\n") {
+				if !strings.HasSuffix(line, linuxArm) {
+					kept = append(kept, line)
+				}
+			}
+			f.assets["checksums.txt"] = []byte(strings.Join(kept, "\n"))
+		}, "linux/arm64: checksums.txt has no entry for " + linuxArm},
+		{"asset names are trimmed", func(f *fakeGitHub) { f.namePad = " " }, ""},
 		{"checksum mismatch", func(f *fakeGitHub) { f.assets[linuxArm] = buildZip(t, file("demo.so"), file("extra")) }, "checksum mismatch"},
 		{"zip breaks the library rule", func(f *fakeGitHub) {
 			f.assets[linuxArm] = buildZip(t, file("lib/demo.so"))
@@ -257,6 +265,11 @@ func TestReleasesCheck(t *testing.T) {
 			f.status = http.StatusForbidden
 			f.header = http.Header{"X-Ratelimit-Remaining": {"0"}, "X-Ratelimit-Reset": {"1790000000"}}
 		}, "GitHub rate limit hit (403 Forbidden)"},
+		{"secondary rate limit", func(f *fakeGitHub) {
+			f.status = http.StatusForbidden
+			f.header = http.Header{"Retry-After": {"60"}}
+		}, "GitHub rate limit hit (403 Forbidden)"},
+		{"forbidden", func(f *fakeGitHub) { f.status = http.StatusForbidden }, "releases/latest: 403 Forbidden"},
 		{"too many requests", func(f *fakeGitHub) { f.status = http.StatusTooManyRequests }, "rate limit hit (429"},
 		{"no release", func(f *fakeGitHub) { f.status = http.StatusNotFound }, "404 Not Found"},
 	}
@@ -376,5 +389,21 @@ func TestGetHidesSignedQuery(t *testing.T) {
 	_, err := Releases{Client: server.Client(), APIBase: server.URL}.get(context.Background(), server.URL+"/download", "*/*")
 	if err == nil || !strings.Contains(err.Error(), "/signed") || strings.Contains(err.Error(), "secret") {
 		t.Fatalf("want a transport error naming /signed without its query, got %v", err)
+	}
+}
+
+func TestGetSizeCap(t *testing.T) {
+	defer func(n int) { maxDownload = n }(maxDownload)
+	maxDownload = 4
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, strings.TrimPrefix(r.URL.Path, "/"))
+	}))
+	defer server.Close()
+	c := Releases{Client: server.Client(), APIBase: server.URL}
+	if data, err := c.get(context.Background(), server.URL+"/four", "*/*"); err != nil || string(data) != "four" {
+		t.Fatalf("want a body at the cap to pass, got %q, %v", data, err)
+	}
+	if _, err := c.get(context.Background(), server.URL+"/five!", "*/*"); err == nil || !strings.Contains(err.Error(), "response exceeds 4 bytes") {
+		t.Fatalf("want a size error, got %v", err)
 	}
 }
