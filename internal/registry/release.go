@@ -180,7 +180,8 @@ func (c Releases) Check(ctx context.Context, w io.Writer, p Plugin) []error {
 	if err != nil {
 		return []error{err}
 	}
-	body, err := c.get(ctx, fmt.Sprintf("%s/repos/%s/%s/releases/latest", strings.TrimSuffix(c.APIBase, "/"), owner, repo), "application/vnd.github+json")
+	latest := fmt.Sprintf("%s/repos/%s/%s/releases/latest", strings.TrimSuffix(c.APIBase, "/"), url.PathEscape(owner), url.PathEscape(repo))
+	body, err := c.get(ctx, latest, "application/vnd.github+json")
 	if err != nil {
 		return []error{fmt.Errorf("latest release: %w", err)}
 	}

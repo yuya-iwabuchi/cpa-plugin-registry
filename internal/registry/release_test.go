@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash/crc32"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -342,5 +343,20 @@ func TestGetRetriesOnce(t *testing.T) {
 				t.Fatalf("want error containing %q, got %v", tt.wantErr, err)
 			}
 		})
+	}
+}
+
+func TestReleasesCheckEscapesRepository(t *testing.T) {
+	var got string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.URL.EscapedPath()
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+	p := basePlugin()
+	p.Repository = "https://github.com/someone/a%3Fb"
+	Releases{Client: server.Client(), APIBase: server.URL}.Check(context.Background(), io.Discard, p)
+	if want := "/repos/someone/a%3Fb/releases/latest"; got != want {
+		t.Fatalf("want path %s, got %s", want, got)
 	}
 }
