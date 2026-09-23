@@ -16,8 +16,9 @@ registry and install contract.
   failure.
 - Set `id` to the plugin's library id, the same key the host config uses for
   the plugin.
-- Leave out `version` unless an entry is deliberately pinned; the host installs
-  the latest GitHub release and uses `version` only as a display fallback.
+- Leave out `version`. For a github-release entry the host always installs the
+  latest GitHub release; `version` only labels the entry in the store, and it
+  goes stale with every release.
 
 ## Adding or updating an entry
 
@@ -25,7 +26,9 @@ registry and install contract.
    `<id>_<version>_<goos>_<goarch>.zip` for darwin/arm64, darwin/amd64,
    linux/amd64, linux/arm64, and windows/amd64. Each zip holds exactly one
    library, at its root, named `<id><ext>` or `<id>-v<version><ext>`, where
-   `<ext>` is `.dylib`, `.so`, or `.dll` for the zip's OS.
+   `<ext>` is `.dylib`, `.so`, or `.dll` for the zip's OS. The host rejects a
+   zip with any symlink or other non-regular entry, or any backslash,
+   absolute or `../` path.
 2. Edit `registry.json`, then run `go run ./cmd/validate registry.json`.
 3. Run `GITHUB_TOKEN=$(gh auth token) go run ./cmd/validate -live registry.json`
    to download and check every platform's release asset.
