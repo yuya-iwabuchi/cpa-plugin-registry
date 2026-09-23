@@ -34,11 +34,6 @@ var (
 		"MIT": true, "Apache-2.0": true, "BSD-2-Clause": true, "BSD-3-Clause": true,
 		"ISC": true, "MPL-2.0": true, "GPL-3.0-only": true, "AGPL-3.0-only": true,
 	}
-
-	sensitiveQueryKeys = map[string]bool{
-		"token": true, "access_token": true, "access_key": true,
-		"secret": true, "secret_key": true, "api_key": true,
-	}
 )
 
 // Registry is the top-level registry document. Field order is the canonical
@@ -274,10 +269,11 @@ func validateArtifact(a Artifact) error {
 	if u.Scheme != "https" && u.Scheme != "http" {
 		return errors.New("artifact url must use http or https")
 	}
-	for key := range u.Query() {
-		if sensitiveQueryKeys[strings.ToLower(strings.TrimSpace(key))] {
-			return errors.New("artifact url contains sensitive query parameter")
-		}
+	if u.User != nil {
+		return errors.New("artifact url must not contain credentials")
+	}
+	if strings.ContainsAny(a.URL, "?#") {
+		return errors.New("artifact url must not contain a query or fragment")
 	}
 	if _, err := hex.DecodeString(a.SHA256); err != nil || len(a.SHA256) != sha256.Size*2 {
 		return errors.New("sha256 must be 64 hex characters")
