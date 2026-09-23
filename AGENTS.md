@@ -32,7 +32,8 @@ registry and install contract.
 2. Edit `registry.json`, then run `go run ./cmd/validate registry.json`.
 3. Run `GITHUB_TOKEN=$(gh auth token) go run ./cmd/validate -live registry.json`
    to download and check every platform's release asset.
-4. Add the plugin to the table in `README.md`.
+4. Add the plugin to the table in `README.md`, with its `/releases/latest`
+   link in the Latest release column.
 
 ## Commands
 
