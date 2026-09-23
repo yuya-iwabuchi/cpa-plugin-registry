@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"path"
 	"strconv"
 	"strings"
@@ -211,11 +212,11 @@ func (c Releases) Check(ctx context.Context, w io.Writer, p Plugin) []error {
 	return errs
 }
 
-func (c Releases) checksums(ctx context.Context, url string) (map[string]string, error) {
-	if url == "" {
+func (c Releases) checksums(ctx context.Context, assetURL string) (map[string]string, error) {
+	if assetURL == "" {
 		return nil, errors.New("release asset checksums.txt not found")
 	}
-	data, err := c.get(ctx, url, "application/octet-stream")
+	data, err := c.get(ctx, assetURL, "application/octet-stream")
 	if err != nil {
 		return nil, fmt.Errorf("download checksums.txt: %w", err)
 	}
@@ -224,7 +225,7 @@ func (c Releases) checksums(ctx context.Context, url string) (map[string]string,
 
 func (c Releases) checkPlatform(ctx context.Context, assets, checksums map[string]string, id, version string, p Platform) (string, error) {
 	name := ArchiveName(id, version, p)
-	url, ok := assets[name]
+	assetURL, ok := assets[name]
 	if !ok {
 		return "", fmt.Errorf("release asset %s not found", name)
 	}
@@ -232,7 +233,7 @@ func (c Releases) checkPlatform(ctx context.Context, assets, checksums map[strin
 	if !ok {
 		return "", fmt.Errorf("checksums.txt has no entry for %s", name)
 	}
-	data, err := c.get(ctx, url, "application/octet-stream")
+	data, err := c.get(ctx, assetURL, "application/octet-stream")
 	if err != nil {
 		return "", fmt.Errorf("download %s: %w", name, err)
 	}
@@ -242,15 +243,16 @@ func (c Releases) checkPlatform(ctx context.Context, assets, checksums map[strin
 	return CheckArchive(data, id, version, p.GOOS)
 }
 
-func (c Releases) get(ctx context.Context, url, accept string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+func (c Releases) get(ctx context.Context, rawURL, accept string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Accept", accept)
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
-	if c.Token != "" {
-		// net/http drops this header when a download redirects to another host.
+	// Only requests to the API host carry the token, and net/http drops it on
+	// a redirect to another host.
+	if api, err := url.Parse(c.APIBase); err == nil && c.Token != "" && req.URL.Host == api.Host {
 		req.Header.Set("Authorization", "Bearer "+c.Token)
 	}
 	resp, err := c.Client.Do(req)
@@ -261,7 +263,7 @@ func (c Releases) get(ctx context.Context, url, accept string) ([]byte, error) {
 	rateLimited := resp.StatusCode == http.StatusTooManyRequests ||
 		resp.StatusCode == http.StatusForbidden && (resp.Header.Get("X-RateLimit-Remaining") == "0" || resp.Header.Get("Retry-After") != "")
 	if rateLimited {
-		msg := fmt.Sprintf("GitHub rate limit hit (%s) for %s", resp.Status, url)
+		msg := fmt.Sprintf("GitHub rate limit hit (%s) for %s", resp.Status, rawURL)
 		if reset := resp.Header.Get("X-RateLimit-Reset"); reset != "" {
 			if unix, err := strconv.ParseInt(reset, 10, 64); err == nil {
 				msg += "; resets at " + time.Unix(unix, 0).UTC().Format(time.RFC3339)
@@ -273,14 +275,14 @@ func (c Releases) get(ctx context.Context, url, accept string) ([]byte, error) {
 		return nil, errors.New(msg)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GET %s: %s", url, resp.Status)
+		return nil, fmt.Errorf("GET %s: %s", rawURL, resp.Status)
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxDownload+1))
 	if err != nil {
 		return nil, err
 	}
 	if len(data) > maxDownload {
-		return nil, fmt.Errorf("GET %s: response exceeds %d bytes", url, maxDownload)
+		return nil, fmt.Errorf("GET %s: response exceeds %d bytes", rawURL, maxDownload)
 	}
 	return data, nil
 }

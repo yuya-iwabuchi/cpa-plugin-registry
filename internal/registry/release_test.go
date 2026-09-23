@@ -165,18 +165,20 @@ func TestReleaseVersion(t *testing.T) {
 	}
 }
 
-// fakeGitHub serves a latest release for someone/cpa-plugin-demo. Each asset
-// body can be replaced, and a nil body leaves the asset out of the release.
+// fakeGitHub serves a latest release for someone/cpa-plugin-demo whose assets
+// download from a second host. Each asset body can be replaced, and a nil
+// body leaves the asset out of the release.
 type fakeGitHub struct {
-	tag    string
-	assets map[string][]byte
-	status int // non-zero: every request answers with this status
-	header http.Header
-	auth   string // Authorization header of the last request
+	tag       string
+	assets    map[string][]byte
+	status    int // non-zero: every request answers with this status
+	header    http.Header
+	downloads string            // base URL of the asset host
+	auth      map[string]string // Authorization header by request path
 }
 
 func newFakeGitHub(t *testing.T) *fakeGitHub {
-	f := &fakeGitHub{tag: "v1.2.0", assets: map[string][]byte{}}
+	f := &fakeGitHub{tag: "v1.2.0", assets: map[string][]byte{}, auth: map[string]string{}}
 	var sums strings.Builder
 	for _, p := range Platforms {
 		name := ArchiveName("demo", "1.2.0", p)
@@ -189,7 +191,7 @@ func newFakeGitHub(t *testing.T) *fakeGitHub {
 }
 
 func (f *fakeGitHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	f.auth = r.Header.Get("Authorization")
+	f.auth[r.URL.Path] = r.Header.Get("Authorization")
 	if f.status != 0 {
 		for k, v := range f.header {
 			w.Header()[k] = v
@@ -201,7 +203,7 @@ func (f *fakeGitHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		rel := release{TagName: f.tag}
 		for name, body := range f.assets {
 			if body != nil {
-				rel.Assets = append(rel.Assets, releaseAsset{Name: name, URL: "http://" + r.Host + "/download/" + name})
+				rel.Assets = append(rel.Assets, releaseAsset{Name: name, URL: f.downloads + "/download/" + name})
 			}
 		}
 		_ = json.NewEncoder(w).Encode(rel)
@@ -217,10 +219,13 @@ func (f *fakeGitHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func runReleaseCheck(t *testing.T, f *fakeGitHub, token string) (string, []error) {
 	t.Helper()
-	server := httptest.NewServer(f)
-	defer server.Close()
+	api := httptest.NewServer(f)
+	defer api.Close()
+	downloads := httptest.NewServer(f)
+	defer downloads.Close()
+	f.downloads = downloads.URL
 	var out bytes.Buffer
-	errs := Releases{Client: server.Client(), APIBase: server.URL, Token: token}.Check(context.Background(), &out, basePlugin())
+	errs := Releases{Client: api.Client(), APIBase: api.URL, Token: token}.Check(context.Background(), &out, basePlugin())
 	return out.String(), errs
 }
 
@@ -265,13 +270,22 @@ func TestReleasesCheck(t *testing.T) {
 	}
 }
 
-func TestReleasesCheckSendsToken(t *testing.T) {
+func TestReleasesCheckSendsTokenToAPIOnly(t *testing.T) {
 	f := newFakeGitHub(t)
 	if _, errs := runReleaseCheck(t, f, "secret"); len(errs) > 0 {
 		t.Fatal(errs)
 	}
-	if f.auth != "Bearer secret" {
-		t.Fatalf("want bearer token, got %q", f.auth)
+	for path, auth := range f.auth {
+		want := ""
+		if strings.HasPrefix(path, "/repos/") {
+			want = "Bearer secret"
+		}
+		if auth != want {
+			t.Errorf("%s: want Authorization %q, got %q", path, want, auth)
+		}
+	}
+	if len(f.auth) != len(Platforms)+2 {
+		t.Fatalf("want a request per asset and the release, got %v", f.auth)
 	}
 	f.status = http.StatusTooManyRequests
 	_, errs := runReleaseCheck(t, f, "secret")
