@@ -125,7 +125,9 @@ func validate(r Registry) []error {
 	if r.SchemaVersion != SchemaVersion && r.SchemaVersion != SchemaVersionV2 {
 		errs = append(errs, fmt.Errorf("unsupported schema_version %d", r.SchemaVersion))
 	}
-	seen := map[string]bool{}
+	// Ids are compared case-insensitively: they name library files, which
+	// collide on case-insensitive filesystems.
+	seen := map[string]string{}
 	for i, p := range r.Plugins {
 		for _, err := range validatePlugin(p, r.SchemaVersion) {
 			errs = append(errs, fmt.Errorf("%s: %w", Label(i, p.ID), err))
@@ -133,10 +135,12 @@ func validate(r Registry) []error {
 		if p.ID == "" {
 			continue
 		}
-		if seen[p.ID] {
-			errs = append(errs, fmt.Errorf("%s: duplicate plugin id", Label(i, p.ID)))
+		key := strings.ToLower(p.ID)
+		if first, ok := seen[key]; ok {
+			errs = append(errs, fmt.Errorf("%s: duplicate plugin id; %q is already listed", Label(i, p.ID), first))
+		} else {
+			seen[key] = p.ID
 		}
-		seen[p.ID] = true
 		if i > 0 && p.ID < r.Plugins[i-1].ID {
 			errs = append(errs, fmt.Errorf("%s: entries must be sorted by id; %q sorts before %q", Label(i, p.ID), p.ID, r.Plugins[i-1].ID))
 		}

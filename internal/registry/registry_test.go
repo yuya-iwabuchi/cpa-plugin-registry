@@ -158,6 +158,7 @@ func TestRegistryRules(t *testing.T) {
 		{"sorted", Registry{SchemaVersion: 1, Plugins: []Plugin{named("a"), named("b")}}, ""},
 		{"unsorted", Registry{SchemaVersion: 1, Plugins: []Plugin{named("b"), named("a")}}, `plugins[1] (a): entries must be sorted by id`},
 		{"duplicate after trim", Registry{SchemaVersion: 1, Plugins: []Plugin{named("a"), named(" a")}}, "plugins[1] (a): duplicate plugin id"},
+		{"duplicate ignoring case", Registry{SchemaVersion: 1, Plugins: []Plugin{named("Demo"), named("demo")}}, `plugins[1] (demo): duplicate plugin id; "Demo" is already listed`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
