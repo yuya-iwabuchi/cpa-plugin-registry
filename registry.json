@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "plugins": [
+    {
+      "id": "claude-seat-pacer",
+      "name": "Claude Seat Pacer",
+      "description": "Uses up each Claude seat's weekly quota before it resets, and keeps every conversation on one seat so its prompt cache keeps working.",
+      "author": "yuya-iwabuchi",
+      "repository": "https://github.com/yuya-iwabuchi/cpa-plugin-claude-seat-pacer",
+      "homepage": "https://github.com/yuya-iwabuchi/cpa-plugin-claude-seat-pacer",
+      "license": "MIT",
+      "tags": [
+        "Scheduler",
+        "Claude"
+      ]
+    }
+  ]
+}
