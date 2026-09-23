@@ -281,6 +281,11 @@ func (c Releases) getOnce(ctx context.Context, rawURL, accept string) ([]byte, e
 	}
 	resp, err := c.Client.Do(req)
 	if err != nil {
+		// A redirected download URL carries its signature in the query.
+		var uerr *url.Error
+		if errors.As(err, &uerr) {
+			uerr.URL, _, _ = strings.Cut(uerr.URL, "?")
+		}
 		return nil, transientError{err}
 	}
 	defer resp.Body.Close()

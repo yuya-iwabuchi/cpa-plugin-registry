@@ -360,3 +360,21 @@ func TestReleasesCheckEscapesRepository(t *testing.T) {
 		t.Fatalf("want path %s, got %s", want, got)
 	}
 }
+
+func TestGetHidesSignedQuery(t *testing.T) {
+	defer func(d time.Duration) { retryDelay = d }(retryDelay)
+	retryDelay = time.Millisecond
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/download" {
+			http.Redirect(w, r, "/signed?X-Amz-Signature=secret", http.StatusFound)
+			return
+		}
+		conn, _, _ := w.(http.Hijacker).Hijack()
+		conn.Close()
+	}))
+	defer server.Close()
+	_, err := Releases{Client: server.Client(), APIBase: server.URL}.get(context.Background(), server.URL+"/download", "*/*")
+	if err == nil || !strings.Contains(err.Error(), "/signed") || strings.Contains(err.Error(), "secret") {
+		t.Fatalf("want a transport error naming /signed without its query, got %v", err)
+	}
+}
