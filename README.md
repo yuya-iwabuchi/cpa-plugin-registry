@@ -5,7 +5,8 @@ that lists Yuya Iwabuchi's CPA plugins.
 
 ## Adding the registry
 
-In the Management Center, open Config → Third-party Plugin Sources and add:
+In the Management Center's config page, add this under Third-party Plugin
+Sources:
 
 ```
 https://raw.githubusercontent.com/yuya-iwabuchi/cpa-plugin-registry/main/registry.json
@@ -21,7 +22,8 @@ plugins:
 
 Then install plugins from the Plugin Store, where this source shows as
 `raw.githubusercontent.com`. Each plugin's README names the oldest host version
-it supports.
+it supports. The host checks for new releases about once an hour, so an update
+can take that long to appear.
 
 ## Plugins
 
