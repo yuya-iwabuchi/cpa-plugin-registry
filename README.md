@@ -3,6 +3,12 @@
 A [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) plugin registry
 that lists Yuya Iwabuchi's CPA plugins.
 
+Claude Seat Pacer is also listed in CLIProxyAPI's official plugin store, which
+every host includes, so a new install needs no source added. This registry
+stays up for installs made from it: the host updates a plugin only from the
+source it was installed from, so those keep updating from here while this
+source stays configured.
+
 ## Adding the registry
 
 In the Management Center, open Config Panel → Advanced → Third-party Plugin
