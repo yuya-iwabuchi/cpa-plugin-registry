@@ -37,7 +37,7 @@ take that long to show.
 
 | Plugin | Description | Minimum host | Latest release |
 | --- | --- | --- | --- |
-| [Claude Seat Pacer](https://github.com/yuya-iwabuchi/cpa-plugin-claude-seat-pacer) | Uses up each Claude seat's weekly quota before it resets, and keeps every conversation on one seat so its prompt cache keeps working. | 7.2.145 | [latest](https://github.com/yuya-iwabuchi/cpa-plugin-claude-seat-pacer/releases/latest) |
+| [Claude Seat Pacer](https://github.com/yuya-iwabuchi/cpa-plugin-claude-seat-pacer) | Uses up each Claude seat's weekly quota before it resets by sending every new conversation to the seat furthest behind its plan, and keeps each conversation on its seat so its prompt cache keeps working. Includes a live pace dashboard. | 7.2.145 | [latest](https://github.com/yuya-iwabuchi/cpa-plugin-claude-seat-pacer/releases/latest) |
 
 ## Trust
 
