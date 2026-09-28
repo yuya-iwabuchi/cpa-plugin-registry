@@ -4,10 +4,11 @@
     {
       "id": "claude-seat-pacer",
       "name": "Claude Seat Pacer",
-      "description": "Uses up each Claude seat's weekly quota before it resets by sending every new conversation to the seat furthest behind its plan, and keeps each conversation on its seat so its prompt cache keeps working. Includes a live pace dashboard.",
+      "description": "Paces Claude seats so each one uses up its weekly quota before the reset. New conversations go to the seat furthest behind its plan and stay there, so prompt caches keep hitting. Includes a live pace dashboard.",
       "author": "yuya-iwabuchi",
       "repository": "https://github.com/yuya-iwabuchi/cpa-plugin-claude-seat-pacer",
       "homepage": "https://github.com/yuya-iwabuchi/cpa-plugin-claude-seat-pacer",
+      "logo": "https://raw.githubusercontent.com/yuya-iwabuchi/cpa-plugin-claude-seat-pacer/main/docs/logo.svg",
       "license": "MIT",
       "tags": [
         "Scheduler",
